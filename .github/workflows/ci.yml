@@ -13,7 +13,7 @@ jobs:
   scripts:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: shellcheck
         run: shellcheck --version && shellcheck scripts/*.sh tests/run.sh tests/fakes/*
       - name: script tests
@@ -24,7 +24,7 @@ jobs:
     # runner validates it without building anything.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: install herdr
         run: |
           curl -fsSL https://herdr.dev/install.sh | sh
