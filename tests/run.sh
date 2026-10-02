@@ -27,7 +27,7 @@ setup() {
 	FAKE_CURL_LOG="$sandbox/curl.log"
 	FAKE_SHIPYARD_LOG="$sandbox/shipyard.log"
 	export HOME PATH FAKE_RELEASE_DIR FAKE_CURL_LOG FAKE_SHIPYARD_LOG
-	unset SHIPYARD_BINARY FAKE_UNAME_S FAKE_UNAME_M FAKE_SHIPYARD_EXIT FAKE_SHIPYARD_LIST \
+	unset SHIPYARD_BINARY FAKE_UNAME_S FAKE_UNAME_M FAKE_SHIPYARD_EXIT FAKE_SHIPYARD_LIST FAKE_CURL_OFFLINE \
 		HERDR_PLUGIN_EVENT HERDR_PLUGIN_EVENT_JSON
 	: >"$FAKE_CURL_LOG"
 	: >"$FAKE_SHIPYARD_LOG"
@@ -133,6 +133,13 @@ test_install_refuses_a_checksum_file_without_a_checksum() {
 test_install_fails_clearly_when_the_release_has_no_linux_build() {
 	run "$plugin/scripts/install-shipyard.sh"
 	assert_status 1
+	assert_contains "$sandbox/stderr" "the latest shipyard release has no Linux build yet (shipyard-linux-x86_64 isn't there); try again in a few minutes, or set SHIPYARD_BINARY to install a local binary"
+	[ ! -e "$plugin/bin/shipyard" ] || fail "something was installed"
+
+	# A download that fails another way says only that.
+	publish shipyard-linux-x86_64
+	FAKE_CURL_OFFLINE=1 run "$plugin/scripts/install-shipyard.sh"
+	assert_status 1
 	assert_contains "$sandbox/stderr" "couldn't download $release_url/shipyard-linux-x86_64"
 	[ ! -e "$plugin/bin/shipyard" ] || fail "something was installed"
 }
@@ -142,7 +149,7 @@ test_install_fails_when_the_checksum_file_is_missing() {
 	rm "$FAKE_RELEASE_DIR/shipyard-linux-x86_64.sha256"
 	run "$plugin/scripts/install-shipyard.sh"
 	assert_status 1
-	assert_contains "$sandbox/stderr" "couldn't download $release_url/shipyard-linux-x86_64.sha256"
+	assert_contains "$sandbox/stderr" "the latest shipyard release has no Linux build yet (shipyard-linux-x86_64.sha256 isn't there)"
 	[ ! -e "$plugin/bin/shipyard" ] || fail "an unchecked download was installed"
 }
 

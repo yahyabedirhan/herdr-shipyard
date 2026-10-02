@@ -45,9 +45,17 @@ sha256_of() {
 	fi
 }
 
+# A release is published before its Linux files are attached, a few minutes
+# later, so a file it lacks (an HTTP error, curl's status 22) is most likely
+# still on its way.
 download() {
-	curl --fail --silent --show-error --location --retry 3 --output "$2" "$1" ||
-		fail "couldn't download $1"
+	status=0
+	curl --fail --silent --show-error --location --retry 3 --output "$2" "$1" || status=$?
+	case "$status" in
+	0) ;;
+	22) fail "the latest shipyard release has no Linux build yet (${1##*/} isn't there); try again in a few minutes, or set SHIPYARD_BINARY to install a local binary" ;;
+	*) fail "couldn't download $1" ;;
+	esac
 }
 
 # Work beside bin/shipyard, so the finished binary is renamed into place.
