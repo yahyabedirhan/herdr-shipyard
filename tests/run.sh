@@ -337,6 +337,26 @@ event=pane.closed
 event_json=$(cat "$fixtures/events/pane-closed.json")"
 }
 
+test_closed_tab_runs_herdr_event() {
+	install_plugin_binary
+	run_event tab.closed "$fixtures/events/tab-closed.json"
+	assert_status 0
+	assert_lines "$FAKE_SHIPYARD_LOG" "args=herdr-event
+cwd=/
+event=tab.closed
+event_json=$(cat "$fixtures/events/tab-closed.json")"
+}
+
+test_closed_workspace_runs_herdr_event() {
+	install_plugin_binary
+	run_event workspace.closed "$fixtures/events/workspace-closed.json"
+	assert_status 0
+	assert_lines "$FAKE_SHIPYARD_LOG" "args=herdr-event
+cwd=/
+event=workspace.closed
+event_json=$(cat "$fixtures/events/workspace-closed.json")"
+}
+
 test_a_failing_herdr_event_fails_the_hook() {
 	install_plugin_binary
 	FAKE_SHIPYARD_EXIT=3 run_event pane.closed "$fixtures/events/pane-closed.json"
@@ -393,7 +413,13 @@ assert m["platforms"] == ["linux", "macos"], m["platforms"]
 assert m["build"] == [{"command": ["sh", "scripts/install-shipyard.sh"], "platforms": ["linux"]}], m["build"]
 events = {e["on"]: e["command"] for e in m["events"]}
 hook = ["sh", "scripts/shipyard.sh", "herdr-event"]
-assert events == {"pane.agent_status_changed": hook, "pane.closed": hook}, events
+assert events == {
+    "pane.agent_status_changed": hook,
+    "pane.closed": hook,
+    "tab.closed": hook,
+    "workspace.closed": hook,
+}, events
+assert all(e["platforms"] == ["linux"] for e in m["events"]), m["events"]
 actions = {a["id"]: a["command"] for a in m["actions"]}
 assert actions["list"] == ["sh", "scripts/shipyard.sh", "ping", "list", "--json"], actions
 for entry in m["build"] + m["startup"] + m["actions"] + m["events"]:

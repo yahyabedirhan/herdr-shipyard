@@ -38,3 +38,15 @@ platforms = ["linux"]
 on = "pane.closed"
 command = ["sh", "scripts/shipyard.sh", "herdr-event"]
 platforms = ["linux"]
+
+# Herdr sends no pane.closed for the panes a closed tab or workspace takes
+# with it, so these let shipyard withdraw their blocked pings too.
+[[events]]
+on = "tab.closed"
+command = ["sh", "scripts/shipyard.sh", "herdr-event"]
+platforms = ["linux"]
+
+[[events]]
+on = "workspace.closed"
+command = ["sh", "scripts/shipyard.sh", "herdr-event"]
+platforms = ["linux"]

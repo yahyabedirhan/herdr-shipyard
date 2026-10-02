@@ -49,6 +49,7 @@ Shipyard then asks the machine for its pings every 30 seconds and on ⌘R, throu
 | `herdr plugin install` | `scripts/install-shipyard.sh`: downloads, checks and keeps `shipyard` |
 | Herdr starts, or you invoke the `link` action | `scripts/link-shipyard.sh`: links `~/.local/bin/shipyard` |
 | An agent's status changes, or a pane closes | `shipyard herdr-event`, which sends or withdraws the blocked ping |
+| A tab or workspace closes | `shipyard herdr-event`, which withdraws the blocked pings of the panes that closed with it (Herdr sends no `pane.closed` for them) |
 | Your Mac's shipyard asks for pings (the `list` action) | `shipyard ping list --json` |
 
 ## Trying a local build
