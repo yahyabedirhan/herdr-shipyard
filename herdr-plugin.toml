@@ -1,0 +1,40 @@
+id = "yahyabedirhan.herdr-shipyard"
+name = "herdr-shipyard"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+description = "Puts the shipyard command on this machine and pings shipyard when an agent here is blocked."
+platforms = ["linux", "macos"]
+
+# Shipyard publishes the shipyard command for Linux only. On macOS the
+# shipyard app already carries it, so every entry below is Linux-only and the
+# plugin does nothing there.
+
+[[build]]
+command = ["sh", "scripts/install-shipyard.sh"]
+platforms = ["linux"]
+
+[[startup]]
+command = ["sh", "scripts/link-shipyard.sh"]
+platforms = ["linux"]
+
+[[actions]]
+id = "list"
+title = "List shipyard pings as JSON"
+command = ["sh", "scripts/shipyard.sh", "ping", "list", "--json"]
+platforms = ["linux"]
+
+[[actions]]
+id = "link"
+title = "Link shipyard into ~/.local/bin"
+command = ["sh", "scripts/link-shipyard.sh"]
+platforms = ["linux"]
+
+[[events]]
+on = "pane.agent_status_changed"
+command = ["sh", "scripts/shipyard.sh", "herdr-event"]
+platforms = ["linux"]
+
+[[events]]
+on = "pane.closed"
+command = ["sh", "scripts/shipyard.sh", "herdr-event"]
+platforms = ["linux"]

@@ -1,0 +1,37 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck --version && shellcheck scripts/*.sh tests/run.sh tests/fakes/*
+      - name: script tests
+        run: sh tests/run.sh
+
+  manifest:
+    # Herdr itself reads the manifest: an offline `plugin link` on a fresh
+    # runner validates it without building anything.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install herdr
+        run: |
+          curl -fsSL https://herdr.dev/install.sh | sh
+          echo "$HOME/.local/bin" >>"$GITHUB_PATH"
+      - name: link the plugin
+        run: |
+          herdr --version
+          herdr plugin link "$GITHUB_WORKSPACE"
+          herdr plugin list --plugin yahyabedirhan.herdr-shipyard --json | tee plugins.json
+          grep -qF 'yahyabedirhan.herdr-shipyard' plugins.json

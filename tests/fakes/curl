@@ -1,0 +1,32 @@
+#!/bin/sh
+# A fake curl for the install script's downloads. It records each URL in
+# $FAKE_CURL_LOG and serves the file of the same name from $FAKE_RELEASE_DIR,
+# failing like `curl --fail` when there's none.
+set -eu
+
+out=""
+url=""
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+	--output | -o)
+		out="$2"
+		shift 2
+		;;
+	--retry)
+		shift 2
+		;;
+	-*) shift ;;
+	*)
+		url="$1"
+		shift
+		;;
+	esac
+done
+
+printf '%s\n' "$url" >>"${FAKE_CURL_LOG:-/dev/null}"
+file="$FAKE_RELEASE_DIR/${url##*/}"
+if [ ! -f "$file" ]; then
+	echo "curl: (22) The requested URL returned error: 404" >&2
+	exit 22
+fi
+cp "$file" "$out"

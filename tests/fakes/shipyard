@@ -1,0 +1,23 @@
+#!/bin/sh
+# A fake shipyard. It records each call's arguments, directory and Herdr event
+# environment in $FAKE_SHIPYARD_LOG, prints a version, and answers
+# `ping list --json` with the document in $FAKE_SHIPYARD_LIST. $FAKE_SHIPYARD_EXIT
+# sets its exit status.
+set -eu
+
+if [ "${1:-}" = "--version" ]; then
+	echo "shipyard 0.0.6-fake"
+	exit 0
+fi
+
+{
+	printf 'args=%s\n' "$*"
+	printf 'cwd=%s\n' "$(pwd)"
+	printf 'event=%s\n' "${HERDR_PLUGIN_EVENT:-}"
+	printf 'event_json=%s\n' "${HERDR_PLUGIN_EVENT_JSON:-}"
+} >>"${FAKE_SHIPYARD_LOG:-/dev/null}"
+
+if [ "${1:-}" = ping ] && [ "${2:-}" = list ] && [ -n "${FAKE_SHIPYARD_LIST:-}" ]; then
+	cat "$FAKE_SHIPYARD_LIST"
+fi
+exit "${FAKE_SHIPYARD_EXIT:-0}"
