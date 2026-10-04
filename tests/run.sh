@@ -405,6 +405,218 @@ event=
 event_json="
 }
 
+# --- notices.sh: notices for the Mac's poll -----------------------------------
+
+notices_dir() { echo "$HOME/.local/share/shipyard/notices"; }
+
+# Runs notices.sh the way Herdr runs an action: from the plugin directory.
+# Standard input passes through, for `add`.
+run_notices() {
+	(cd "$plugin" && sh scripts/notices.sh "$@") >"$sandbox/stdout" 2>"$sandbox/stderr"
+	status=$?
+}
+
+# Puts $1 on the next run's standard input (a pipe would run it in a
+# subshell, losing its status).
+feed() { printf '%s' "$1" >"$sandbox/stdin"; }
+
+# Stores the notice $2 under the id $1, as shipyard on the machine does.
+add_notice() {
+	feed "$2"
+	run_notices add "$1" <"$sandbox/stdin"
+	assert_status 0
+}
+
+# Sets the stored notice $1's age to $2 minutes.
+age_notice() {
+	python3 - "$(notices_dir)" "$1" "$2" <<'EOF'
+import os, sys, time
+directory, notice_id, minutes = sys.argv[1], sys.argv[2], int(sys.argv[3])
+path = os.path.join(directory, notice_id.encode().hex() + ".json")
+then = time.time() - minutes * 60
+os.utime(path, (then, then))
+EOF
+}
+
+# Checks stdout is one JSON document, and prints its notices' ids in order.
+listed_ids() {
+	python3 - "$sandbox/stdout" <<'EOF'
+import json, sys
+document = json.load(open(sys.argv[1]))
+print(" ".join(notice["id"] for notice in document["notices"]))
+EOF
+}
+
+test_a_stored_notice_is_listed_exactly_as_given() {
+	notice='{"id":"orch-1","sent":"2026-10-03T12:00:00Z","title":"tests 3/10","extra":{"kept":[1,2]}}'
+	add_notice orch-1 "$notice"
+	run_notices list
+	assert_status 0
+	assert_lines "$sandbox/stdout" "{\"version\":1,\"truncated\":false,\"notices\":[$notice]}"
+}
+
+test_an_empty_store_lists_no_notices() {
+	run_notices list
+	assert_status 0
+	assert_lines "$sandbox/stdout" '{"version":1,"truncated":false,"notices":[]}'
+}
+
+test_notices_are_listed_oldest_first() {
+	add_notice b '{"id":"b","sent":"2026-10-03T12:01:00Z"}'
+	add_notice a '{"id":"a","sent":"2026-10-03T12:00:00Z"}'
+	add_notice c '{"id":"c","sent":"2026-10-03T12:02:00Z"}'
+	age_notice a 3
+	age_notice b 2
+	age_notice c 1
+	run_notices list
+	[ "$(listed_ids)" = "a b c" ] || fail "expected a b c, got $(listed_ids)"
+}
+
+test_a_notice_replaces_the_one_with_its_id() {
+	add_notice orch-1 '{"id":"orch-1","sent":"2026-10-03T12:00:00Z","title":"tests 3/10"}'
+	add_notice other '{"id":"other","sent":"2026-10-03T12:00:30Z"}'
+	age_notice orch-1 2
+	age_notice other 1
+	add_notice orch-1 '{"id":"orch-1","sent":"2026-10-03T12:01:00Z","title":"tests 10/10"}'
+	run_notices list
+	assert_lines "$sandbox/stdout" '{"version":1,"truncated":false,"notices":[{"id":"other","sent":"2026-10-03T12:00:30Z"},{"id":"orch-1","sent":"2026-10-03T12:01:00Z","title":"tests 10/10"}]}'
+}
+
+test_any_id_is_stored_safely() {
+	for id in "../escape" "a/b" "with space" ".hidden" "ünï"; do
+		add_notice "$id" "{\"id\":\"$id\",\"sent\":\"2026-10-03T12:00:00Z\"}"
+	done
+	[ ! -e "$HOME/.local/share/shipyard/escape" ] || fail "an id escaped the notices folder"
+	run_notices list
+	python3 - "$sandbox/stdout" <<'EOF' || fail "not every id was listed"
+import json, sys
+ids = sorted(notice["id"] for notice in json.load(open(sys.argv[1]))["notices"])
+assert ids == sorted(["../escape", "a/b", "with space", ".hidden", "ünï"]), ids
+EOF
+	run_notices remove "a/b" "with space"
+	assert_status 0
+	run_notices list
+	assert_not_contains "$sandbox/stdout" '"a/b"'
+	assert_not_contains "$sandbox/stdout" '"with space"'
+	assert_contains "$sandbox/stdout" '"../escape"'
+}
+
+test_removing_by_id_drops_only_those_notices() {
+	add_notice a '{"id":"a","sent":"2026-10-03T12:00:00Z"}'
+	add_notice b '{"id":"b","sent":"2026-10-03T12:00:00Z"}'
+	add_notice c '{"id":"c","sent":"2026-10-03T12:00:00Z"}'
+	run_notices remove a c unknown
+	assert_status 0
+	run_notices list
+	[ "$(listed_ids)" = "b" ] || fail "expected only b, got $(listed_ids)"
+}
+
+test_reading_removes_what_the_last_listing_handed_out() {
+	add_notice a '{"id":"a","sent":"2026-10-03T12:00:00Z"}'
+	add_notice b '{"id":"b","sent":"2026-10-03T12:00:00Z","title":"before"}'
+	age_notice a 3
+	age_notice b 2
+	run_notices list
+	# Arriving after the listing: c is new, and b is replaced.
+	add_notice c '{"id":"c","sent":"2026-10-03T12:01:00Z"}'
+	age_notice c 1
+	add_notice b '{"id":"b","sent":"2026-10-03T12:01:00Z","title":"after"}'
+	run_notices read
+	assert_status 0
+	assert_lines "$sandbox/stdout" '{"version":1,"removed":1}'
+	run_notices list
+	[ "$(listed_ids)" = "c b" ] || fail "expected c and the new b, got $(listed_ids)"
+	assert_contains "$sandbox/stdout" '"title":"after"'
+
+	# Each read takes the listing it removes, so a second one removes nothing.
+	run_notices read
+	assert_lines "$sandbox/stdout" '{"version":1,"removed":2}'
+	run_notices read
+	assert_lines "$sandbox/stdout" '{"version":1,"removed":0}'
+}
+
+test_reading_before_any_listing_removes_nothing() {
+	add_notice a '{"id":"a","sent":"2026-10-03T12:00:00Z"}'
+	run_notices read
+	assert_status 0
+	assert_lines "$sandbox/stdout" '{"version":1,"removed":0}'
+	run_notices list
+	[ "$(listed_ids)" = "a" ] || fail "expected a, got $(listed_ids)"
+}
+
+test_notices_older_than_an_hour_are_pruned() {
+	add_notice old '{"id":"old","sent":"2026-10-03T11:00:00Z"}'
+	add_notice fresh '{"id":"fresh","sent":"2026-10-03T11:02:00Z"}'
+	age_notice old 61
+	age_notice fresh 59
+	run_notices list
+	[ "$(listed_ids)" = "fresh" ] || fail "expected only fresh, got $(listed_ids)"
+	[ "$(find "$(notices_dir)" -name '*.json' | wc -l)" -eq 1 ] || fail "the old notice's file is still there"
+}
+
+test_a_listing_stays_within_what_herdr_keeps_and_says_when_it_stopped() {
+	padding=$(python3 -c 'print("x" * 10000)')
+	for id in n1 n2 n3 n4 n5 n6; do
+		add_notice "$id" "{\"id\":\"$id\",\"sent\":\"2026-10-03T12:00:00Z\",\"body\":\"$padding\"}"
+	done
+	for id in n1 n2 n3 n4 n5 n6; do age_notice "$id" "${id#n}"; done
+	run_notices list
+	[ "$(wc -c <"$sandbox/stdout")" -le 49152 ] || fail "the listing is over 48 KiB"
+	assert_contains "$sandbox/stdout" '"truncated":true'
+	# n6 is the oldest; the newest ones wait for the next poll.
+	[ "$(listed_ids)" = "n6 n5 n4 n3" ] || fail "expected the four oldest, got $(listed_ids)"
+	run_notices read
+	run_notices list
+	assert_contains "$sandbox/stdout" '"truncated":false'
+	[ "$(listed_ids)" = "n2 n1" ] || fail "expected the rest, got $(listed_ids)"
+}
+
+test_add_refuses_a_notice_no_listing_could_carry() {
+	big=$(python3 -c 'print("x" * 50000)')
+	feed "{\"id\":\"big\",\"body\":\"$big\"}"
+	run_notices add big <"$sandbox/stdin"
+	assert_status 1
+	assert_contains "$sandbox/stderr" "more than a listing can carry"
+	run_notices list
+	assert_lines "$sandbox/stdout" '{"version":1,"truncated":false,"notices":[]}'
+}
+
+test_notices_sh_refuses_misuse() {
+	feed ''
+	run_notices add empty <"$sandbox/stdin"
+	assert_status 2
+	assert_contains "$sandbox/stderr" "no notice on standard input"
+	feed '{}'
+	run_notices add <"$sandbox/stdin"
+	assert_status 2
+	feed '{}'
+	run_notices add "" <"$sandbox/stdin"
+	assert_status 2
+	feed '{}'
+	run_notices add a b <"$sandbox/stdin"
+	assert_status 2
+	run_notices
+	assert_status 2
+	run_notices remove
+	assert_status 2
+	run_notices frobnicate
+	assert_status 2
+	assert_contains "$sandbox/stderr" "usage:"
+	run_notices list
+	assert_lines "$sandbox/stdout" '{"version":1,"truncated":false,"notices":[]}'
+	[ -z "$(ls -A "$(notices_dir)")" ] || fail "misuse left files behind: $(ls -A "$(notices_dir)")"
+}
+
+test_notices_leave_pings_alone() {
+	mkdir -p "$HOME/.local/share/shipyard/pings"
+	echo '{"id":"p"}' >"$HOME/.local/share/shipyard/pings/p.json"
+	add_notice a '{"id":"a","sent":"2026-10-03T12:00:00Z"}'
+	run_notices list
+	run_notices read
+	run_notices remove p
+	assert_contains "$HOME/.local/share/shipyard/pings/p.json" '{"id":"p"}'
+}
+
 # --- herdr-plugin.toml -------------------------------------------------------
 
 test_manifest_declares_the_plugin_and_its_commands() {
@@ -428,7 +640,13 @@ assert events == {
 }, events
 assert all(e["platforms"] == ["linux"] for e in m["events"]), m["events"]
 actions = {a["id"]: a["command"] for a in m["actions"]}
-assert actions["list"] == ["sh", "scripts/shipyard.sh", "ping", "list", "--json"], actions
+assert actions == {
+    "list": ["sh", "scripts/shipyard.sh", "ping", "list", "--json"],
+    "link": ["sh", "scripts/link-shipyard.sh"],
+    "notices": ["sh", "scripts/notices.sh", "list"],
+    "notices-read": ["sh", "scripts/notices.sh", "read"],
+}, actions
+assert all(a["platforms"] == ["linux"] for a in m["actions"]), m["actions"]
 for entry in m["build"] + m["startup"] + m["actions"] + m["events"]:
     assert os.path.isfile(os.path.join(root, entry["command"][1])), entry
 EOF

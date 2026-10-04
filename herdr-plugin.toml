@@ -2,7 +2,7 @@ id = "yahyabedirhan.herdr-shipyard"
 name = "herdr-shipyard"
 version = "0.1.0"
 min_herdr_version = "0.9.0"
-description = "Puts the shipyard command on this machine and pings shipyard when an agent here is blocked."
+description = "Puts the shipyard command on this machine, pings shipyard when an agent here is blocked, and holds notices for the Mac."
 platforms = ["linux", "macos"]
 
 # Shipyard publishes the shipyard command for Linux only. On macOS the
@@ -21,6 +21,21 @@ platforms = ["linux"]
 id = "list"
 title = "List shipyard pings as JSON"
 command = ["sh", "scripts/shipyard.sh", "ping", "list", "--json"]
+platforms = ["linux"]
+
+# Shipyard's notices wait here until the Mac's poll collects them: `notices`
+# lists them, oldest first, and `notices-read` removes the ones that listing
+# handed out, once the Mac has read them.
+[[actions]]
+id = "notices"
+title = "List shipyard notices as JSON"
+command = ["sh", "scripts/notices.sh", "list"]
+platforms = ["linux"]
+
+[[actions]]
+id = "notices-read"
+title = "Remove the shipyard notices the last listing handed out"
+command = ["sh", "scripts/notices.sh", "read"]
 platforms = ["linux"]
 
 [[actions]]
