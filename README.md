@@ -110,4 +110,4 @@ The tests run the scripts as Herdr does, with a fake `shipyard`, a fake download
 
 ## License
 
-MIT
+The code is licensed under the [Apache License 2.0](LICENSE). See [LICENSE](LICENSE) and [NOTICE](NOTICE). If you use or adapt it, please credit Yahya Bedirhan Pak with a link to [yahyapak.dev](https://yahyapak.dev).
